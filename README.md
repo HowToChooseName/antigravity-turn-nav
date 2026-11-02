@@ -4,7 +4,12 @@
 
 长对话（上百轮）里手动往上翻找某句话非常痛苦，这个插件就是解决这件事的。
 
-![rail](assets/logo.svg)
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshot-expanded.png" width="420" alt="展开态：每轮一行，带灰字日期"><br><sub>展开态 · 悬停/点击展开，每轮文字 + 日期</sub></td>
+    <td align="center"><img src="assets/screenshot-collapsed.png" width="180" alt="收起态：只留进度条，高亮当前轮"><br><sub>收起态 · 只留进度条，高亮跟随滚动</sub></td>
+  </tr>
+</table>
 
 ## 特性
 
