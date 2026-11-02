@@ -1,0 +1,9 @@
+{
+  "command": "node",
+  "args": [
+    "main.mjs"
+  ],
+  "restart_policy": "always",
+  "display_name": "轮次侧边栏",
+  "description": "在 Antigravity 会话里按轮次浏览当前会话，点击跳转到对应轮次。数据读自会话 SQLite 库，通过渲染进程调试端口注入，不修改 app.asar。"
+}

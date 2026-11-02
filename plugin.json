@@ -1,0 +1,7 @@
+{
+  "name": "turn-nav",
+  "display_name": "轮次侧边栏",
+  "description": "在 Antigravity 里按轮次浏览当前会话：右侧列出该会话每一条用户输入，点击直接跳到对应轮次。数据读自会话 SQLite 库，通过渲染进程调试端口注入，不修改 app.asar。",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg"
+}
