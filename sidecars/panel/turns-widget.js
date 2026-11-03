@@ -9,7 +9,7 @@
 // conversation, so it survives virtualization, re-renders and duplicate text —
 // which is what made earlier index/text-based mapping jump to the wrong turn.
 (function () {
-  const VERSION = 'v36';
+  const VERSION = 'v37';
   if (window.__agTurnNavInstalled && window.__agTurnNavVersion === VERSION) return;
   window.__agTurnNavInstalled = true;
   window.__agTurnNavVersion = VERSION;
@@ -38,12 +38,12 @@
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
         transition: background .18s ease, box-shadow .18s ease, padding .18s ease;
       }
-      .rail:hover, .rail.expanded { background: rgba(30,31,34,0.98); box-shadow: 0 16px 44px rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,0.08); padding: 10px 12px; }
-      .rail:not(:hover):not(.expanded) { border: 1px solid transparent; }
+      .rail.open, .rail.expanded { background: rgba(30,31,34,0.98); box-shadow: 0 16px 44px rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,0.08); padding: 10px 12px; }
+      .rail:not(.open):not(.expanded) { border: 1px solid transparent; }
       .rows { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; max-height: 66vh; overflow-y: auto; overflow-x: hidden; scroll-behavior: auto; }
-      .rail:hover .rows, .rail.expanded .rows { padding-right: 6px; }
-      .rail:not(:hover):not(.expanded) .rows { overflow-y: hidden; scrollbar-width: none; }
-      .rail:not(:hover):not(.expanded) .rows::-webkit-scrollbar { display: none; }
+      .rail.open .rows, .rail.expanded .rows { padding-right: 6px; }
+      .rail:not(.open):not(.expanded) .rows { overflow-y: hidden; scrollbar-width: none; }
+      .rail:not(.open):not(.expanded) .rows::-webkit-scrollbar { display: none; }
       .rows::-webkit-scrollbar { width: 4px; }
       .rows::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; transition: background .18s ease; }
       .rows:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,.28); }
@@ -57,14 +57,14 @@
       .txt > .tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       /* [图片] sits INSIDE the message preview, like a chat app's inline marker */
       .im { flex: none; font-size: 12px; line-height: 1.3; color: #6b7280; }
-      .rail:hover .txt, .rail.expanded .txt { max-width: 264px; opacity: 1; }
+      .rail.open .txt, .rail.expanded .txt { max-width: 264px; opacity: 1; }
       .row:hover .txt { color: #e6e7ea; }
       .row:hover .im { color: #8b929b; }
       .row.current .txt { color: #ffffff; }
       .row.current .im { color: #9aa3ad; }
       /* date: secondary, muted gray; only visible when expanded */
       .date { display: none; flex: none; font-size: 11px; line-height: 1.3; color: #6b7280; white-space: nowrap; }
-      .rail:hover .date, .rail.expanded .date { display: inline; }
+      .rail.open .date, .rail.expanded .date { display: inline; }
       .row:hover .date { color: #8b929b; }
       .row.current .date { color: #9aa3ad; }
       .bar { flex: none; width: 9px; height: 2px; border-radius: 1px; background: rgba(255,255,255,.42); transition: width .18s ease, background .18s ease; }
@@ -489,8 +489,35 @@
       currentFromScroll();
     }
 
+    // A jump must be something the user asked for. The strip sits over the left
+    // edge of the transcript, and hovering used to expand it instantly — a click
+    // aimed at whatever was underneath landed on a row and yanked the conversation
+    // to a much earlier turn ("打开侧边栏后莫名其妙跳走"). Two guards:
+    //  · expansion waits for a short dwell, so a cursor just passing through never
+    //    turns the 13px strip into a 300px click target;
+    //  · a row click only counts when the press itself started on an open rail.
+    let openAt = 0;
+    let openTimer = 0;
+    let downOnOpenRail = false;
+    const HOVER_INTENT = 300;
+    function openRail() {
+      if (rail.classList.contains('open')) return;
+      rail.classList.add('open');
+      openAt = performance.now();
+      revealCurrent();
+    }
+    function closeRail() {
+      if (!rail.classList.contains('open')) return;
+      rail.classList.remove('open');
+      openAt = 0;
+    }
+    rail.addEventListener('pointerdown', () => {
+      downOnOpenRail = rail.classList.contains('open') || rail.classList.contains('expanded');
+    }, true);
     rowsEl.addEventListener('click', e => {
       const row = e.target.closest('.row'); if (!row || row.dataset.key == null) return;
+      if (!downOnOpenRail) return;                 // press began on the bare strip
+      if (openAt && performance.now() - openAt < 220) return;  // panel just appeared
       const key = Number(row.dataset.key);
       const turn = turns.find(t => t.key === key);
       if (turn) jump(turn);
@@ -508,10 +535,18 @@
     // row measured while collapsed sits a few px off after hovering. Re-align on
     // hover (after the width/padding transition settles) instead of leaving the
     // lit row half-clipped.
+    // Hover intent instead of instant expansion (see the click guard above). Once
+    // open, the collapsed→expanded padding flips, so re-align the lit row after the
+    // transition settles rather than leaving it half-clipped.
     rail.addEventListener('mouseenter', () => {
-      if (currentKey == null) return;
-      requestAnimationFrame(() => requestAnimationFrame(() => revealCurrent()));
+      clearTimeout(openTimer);
+      openTimer = setTimeout(() => {
+        openRail();
+        if (currentKey == null) return;
+        requestAnimationFrame(() => requestAnimationFrame(() => revealCurrent()));
+      }, HOVER_INTENT);
     });
+    rail.addEventListener('mouseleave', () => { clearTimeout(openTimer); closeRail(); });
     setInterval(() => { syncTurns(); currentFromScroll(); scheduleReposition(); }, 800);
     try { new ResizeObserver(scheduleReposition).observe(document.body); } catch {}
     try {
