@@ -9,7 +9,7 @@
 // conversation, so it survives virtualization, re-renders and duplicate text —
 // which is what made earlier index/text-based mapping jump to the wrong turn.
 (function () {
-  const VERSION = 'v35';
+  const VERSION = 'v36';
   if (window.__agTurnNavInstalled && window.__agTurnNavVersion === VERSION) return;
   window.__agTurnNavInstalled = true;
   window.__agTurnNavVersion = VERSION;
@@ -85,18 +85,30 @@
     const turnEls = () => [...document.querySelectorAll('[data-testid="user-input-step"]')];
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // Match a trailing timestamp (the turn DOM appends one). Kept loose so both
-    // "2026年10月24日 11:27" and ISO-ish "2026-10-24 11:27" split off cleanly.
-    const DATE_RE = /(\d{4}年\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{2}(?::\d{2})?|\d{4}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?)\s*$/;
-    function splitLabel(raw) {
+    // Match a trailing timestamp (the turn DOM appends one). Covers "2026年10月24日
+    // 11:27", ISO-ish "2026-10-24 11:27", relative "昨天 11:27" and — important —
+    // today's bare "11:27", which older patterns missed: the time then stayed glued
+    // to the message, so today's rows rendered it in message color and broke spacing.
+    const DATE_RE = /((?:\d{4}年)?\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{2}(?::\d{2})?|\d{4}[-/]\d{1,2}[-/]\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?|(?:今天|昨天|前天)\s*\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}:\d{2}(?::\d{2})?)\s*$/;
+    // Year is noise in a 200px rail — keep month/day + time only.
+    const fmtDate = d => d.replace(/^\d{4}\s*年\s*/, '').replace(/^\d{4}[-/]/, '').trim();
+
+    function splitLabel(raw, el) {
       const s = norm(raw);
+      // Preferred source: the turn chrome renders the timestamp in its own muted
+      // span. Reading it there is immune to the message text ending in something
+      // that merely looks like a clock (e.g. "会议 14:30").
+      if (el) {
+        const spans = [...el.querySelectorAll('span[class*="text-muted-foreground"]')]
+          .map(n => norm(n.textContent)).filter(t => t && DATE_RE.test(t));
+        const stamp = spans.pop();
+        if (stamp && s.endsWith(stamp)) {
+          return { text: s.slice(0, s.length - stamp.length).trim(), date: fmtDate(stamp) };
+        }
+      }
       const m = s.match(DATE_RE);
       if (!m) return { text: s, date: '' };
-      // Year is noise in a 200px rail — keep month/day + time only.
-      const date = m[1]
-        .replace(/^\d{4}\s*年\s*/, '')
-        .replace(/^\d{4}[-/]/, '');
-      return { text: s.slice(0, m.index).trim(), date };
+      return { text: s.slice(0, m.index).trim(), date: fmtDate(m[1]) };
     }
 
     // Stable identity: walk each user-input-step's React fiber up to the prop
@@ -414,7 +426,7 @@
       turnEls().forEach((el, i) => {
         const key = keyOf(el);
         if (key == null) { missing.push({ el, i }); return; }
-        const { text, date } = splitLabel(el.textContent || '');
+        const { text, date } = splitLabel(el.textContent || '', el);
         const hasImg = !!el.querySelector('img');
         list.push({ key, text: text || (hasImg ? '' : '（空）'), date, hasImg });
       });
@@ -423,7 +435,7 @@
       // (a mixed set would collide with genuine keys and make rows flap).
       if (!list.length && missing.length) {
         missing.forEach(({ el, i }) => {
-          const { text, date } = splitLabel(el.textContent || '');
+          const { text, date } = splitLabel(el.textContent || '', el);
           const hasImg = !!el.querySelector('img');
           list.push({ key: i, text: text || (hasImg ? '' : '（空）'), date, hasImg });
         });
